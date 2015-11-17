@@ -1,115 +1,177 @@
-# This program will take a list of strings that represent
-# potential condidates for passwords on a Fallout 4 terminal.
-# Then one string and corresponding "likeness" integer can be input.
-# Based on the string/likeness pairs entered, it will eliminate
-# candidates that cannot be the password.
+# Fallout 4 AH v1.0
 
 class Candidate
   def initialize(text)
     @text = text
+    @likeness             # Likeness value to actual password.
+    @eligible = true      # True until eliminated.
+  end
+
+  def compare(candidate)
+    # Determine the likeness this candidate has with another.
+
+    likeness = 0
+
+    i = 0
+    loop do
+      if @text[i] == candidate[i]
+        likeness = likeness + 1
+      end
+      i = i + 1
+      break if i == @text.length
+    end
+
+    return likeness
+  end
+
+  def disable()
+    @eligible = false
+  end
+
+  def eligible()
+    return @eligible
   end
 
   def set_likeness(likeness)
     @likeness = likeness
+
+    # If likeness is given a value, that means it is not
+    # the correct password, so it must be eliminated.
+    @eligible = false
   end
 
-  def set_validity(validity)
-    @validity = validity
-  end
-
-  def get_text()
-    return @text
-  end
-
-  def get_likeness()
+  def likeness()
     return @likeness
   end
 
-  def get_validity()
-    return @validity
-  end
-
-  def disable()
-    set_validity(false)
-  end
-
-  def show()
-    puts "#{@text}, #{@likeness}, #{@validity}"
+  def text()
+    return @text
   end
 end
 
-def calculate_likeness(a, b)
-  length = a.length
-  likeness = 0
+def eliminate_others(current_choice, choice_likeness, candidates)
 
-  for i in 0..(length-1)
-    if a[i] == b[i]
-      likeness = likeness + 1
+  # No matter what likeness value the current choice has, since it was not
+  # the correct password, it must be eliminated before proceeding.
+  candidates.each do |i|
+    if choice_likeness < current_choice.length
+      i.disable if current_choice == i.text
     end
   end
 
-  return likeness
-end
+  if choice_likeness == 0
 
-def input_candidates(arr)
-  flag = "0"
-  counter = 0
+    # Any other candidates that share any likeness with
+    # this candidate are incorrect.
 
-  loop do
-    puts "Enter password candidate and press Enter. 0 to finish."
-    puts "Enter candidate ##{counter+1}"
-    current_input = gets.chomp
-    if current_input != flag
-      current_candidate = Candidate.new(current_input)
-      arr.push(current_candidate)
-      counter = counter + 1
+    # Loop through candidate list, check each one's likeness
+    # compared to the current choice.
+
+    # If that likeness is 1 or more, disable that candidate.
+
+    puts "Processing..."
+    candidates.each do |i|
+    puts "Evaluating current choice, #{current_choice}, against #{i.text}"
+      if i.eligible
+        i.disable if i.compare(current_choice) >= 1
+      end
     end
-    break if current_input == flag
+
+  else
+    # Likeness value of current candidate is n, where n > 0
+
+    # Only candidates that have an equal or greater likeness value
+    # with this choice are correct.
+
+    candidates.each do |i|
+      if i.eligible
+        i.disable if i.compare(current_choice) < choice_likeness
+      end
+    end
+
   end
 
-  puts "#{counter} candidates collected!"
-
-  return arr
+  return candidates
 end
 
-def eliminate_candidates(arr)
-  # This function accepts one candidate and likeness value pair at a time,
-  # disables candidates based on how they compare and the logical
-  # possibilities, displays the remaining candidates that are valid
+def get_starting_candidates_from_user()
+  flag = 0
+  count = 0
+  candidates = []
 
-  flag = "0"
+  puts "Enter a starting candidate and press ENTER. Enter 0 when done."
 
   loop do
-    puts "Enter a candidate you have attempted. Enter #{flag} to stop."
     current_input = gets.chomp
-    if current_input != flag
-      current_candidate = current_input
-      puts "Enter the Likeness value of this candidate."
-      current_input = gets.chomp
-      current_likeness = Integer(current_input)
+    if current_input != "0"
+      count = count + 1
+      candidates.push( Candidate.new(current_input) )
+    end
+    puts "You entered \"#{current_input}\". Total candidates entered: #{count}."
+    break if current_input == "0"
+  end
 
-      if current_likeness == 0
-        # Rule out any other candidates that have any likeness to this one.
-        # Loop through the list of candidates.
-        # For each one, except for the current candidate, do a likeness check.
-        # If likeness > 0, disable that candidate.
-        arr.each do | x |
-          if ( x.get_text() != current_candidate ) and ( calculate_likeness(x.get_text, current_candidate) > 0 )
-            x.disable()
-            puts "#{current_candidate} has been disabled."
-          end
+  if count > 0
+    puts "Candidates entered:"
+    candidates.each do |i|
+      puts i.text
+    end
+  end
+
+  return candidates
+end
+
+def try_candidates(candidates)
+  flag = "0"
+  space = " - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
+
+  # Calculate the number of remaining candidates
+  remaining_candidates = 0
+  candidates.each do |i|
+    if i.eligible
+      remaining_candidates = remaining_candidates + 1
+    end
+  end
+
+  puts space
+  puts "You may now start attempting passwords."
+  puts "One at a time, enter a possible password from the list of remaining "
+  puts "password candidates. Then, enter the Likeness value returned by the "
+  puts "terminal. This program will narrow down the remaining options after "
+  puts "each input."
+
+  loop do
+    puts "Enter a possible password:"
+    current_input_candidate = gets.chomp
+    puts "You entered \"#{current_input_candidate}\""
+
+    if current_input_candidate != flag
+      puts "Likeness value for \"#{current_input_candidate}\":"
+      current_input_likeness = (gets.chomp).to_i
+      puts "#{current_input_candidate} has a likeness of #{current_input_likeness}"
+
+      # Eliminate current candidate and all impossible candidates
+      candidates = eliminate_others(current_input_candidate, current_input_likeness, candidates)
+
+      # Calculate the number of remaining candidates
+      remaining_candidates = 0
+      candidates.each do |i|
+        if i.eligible
+          remaining_candidates = remaining_candidates + 1
         end
       end
 
-    end
-    break if current_input == flag
-  end
+      puts space
+      puts "New possible candidates:"
+      candidates.each do |i|
+        puts i.text if i.eligible
+      end
 
-  return arr
+    end
+
+    break if current_input_candidate == flag || remaining_candidates <= 1
+  end
 end
 
-candidates = Array.new
-
-puts "Welcome to the Fallout 4 Aut0h@ck3r"
-candidates = input_candidates(candidates)
-candidates = eliminate_candidates()
+candidates = get_starting_candidates_from_user()
+try_candidates(candidates)
