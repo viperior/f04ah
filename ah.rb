@@ -1,10 +1,11 @@
-# Fallout 4 AH v1.0
+# Fallout 4 AH v1.0.1
 
+# Candidate class is for individual password candidates.
 class Candidate
+  attr_accessor :attempted, :eligible, :likeness, :text
   def initialize(text)
     @attempted = false    # Candidate has been previously attempted.
     @text = text
-    @likeness             # Likeness value to actual password.
     @eligible = true      # True until eliminated.
   end
 
@@ -12,219 +13,147 @@ class Candidate
     # Determine the likeness this candidate has with another.
     likeness = 0
 
-    i = 0
-    loop do
-      if @text[i] == candidate[i]
-        likeness = likeness + 1
-      end
-      i = i + 1
-      break if i == @text.length
+    @text.length.times do |i|
+      likeness += 1 if @text[i] == candidate[i]
     end
 
-    return likeness
+    likeness
   end
 
-  def disable()
-    @eligible = false
-  end
-
-  def set_likeness(likeness)
+  def likeness=(likeness)
     @likeness = likeness
     @attempted = true
-    #If the candidate has a likeness value, it is not the correct password.
-    disable()
-  end
-
-  def attempted()
-    return @attempted
-  end
-
-  def eligible()
-    return @eligible
-  end
-
-  def likeness()
-    return @likeness
-  end
-
-  def text()
-    return @text
+    # If the candidate has a likeness value, it is not the correct password.
+    @eligible = false
   end
 end
 
+# CandidateList class is for a list of Candidate objects.
 class CandidateList
-  def initialize()
+  attr_accessor :candidates
+  def initialize
     @candidates = []
-    @eligible_count
   end
 
-  def calculate_eligible_count()
-    @eligible_count = 0
-
-    @candidates.each do |i|
-      if i.eligible
-        @eligible_count = @eligible_count + 1
-      end
-    end
+  def add_candidate(text, flag)
+    return false if text == flag
+    @candidates.push(Candidate.new(text))
   end
 
-  def show_all_candidates()
-    puts "Candidates:"
-    @candidates.each do |i|
-      puts "#{i.text}"
-    end
-  end
-
-  def show_eligible_candidates()
-    eligible_candidates = get_eligible_candidates()
-
-    puts "Possible candidates:"
-    eligible_candidates.each do |i|
-      puts i.text
-    end
-  end
-
-  def set_likeness(text, likeness)
-    @candidates[ get_index_by_text(text) ].set_likeness(likeness)
-  end
-
-  def add_candidate(text)
-    @candidates.push( Candidate.new(text) )
-    calculate_eligible_count()
-  end
-
-  def get_attempted_candidates()
+  def attempted_candidates
     attempted_candidates = []
 
     @candidates.each do |i|
       attempted_candidates.push(i) if i.attempted
     end
 
-    return attempted_candidates
+    attempted_candidates
   end
 
-  def get_eligible_candidates()
+  def eliminate_based_on_likeness(candidate, likeness)
+    if likeness == 0
+      eliminate_like_candidates(candidate)
+    else
+      eliminate_nonequal_candidates(candidate, likeness)
+    end
+  end
+
+  def eliminate_historically_invalid_candidates(candidate)
+    # Check each remaining candidate against all previously attempted
+    # candidates. Only candidates that have matching likeness to EACH of the
+    # previously tried candidates are valid.
+    attempted_candidates.each do |i|
+      candidate.eligible = false unless candidate.compare(i.text) == i.likeness
+    end
+  end
+
+  def eliminate_like_candidates(candidate)
+    @candidates.each do |i|
+      i.eligible = false if i.compare(candidate) >= 1
+    end
+  end
+
+  def eliminate_nonequal_candidates(candidate, likeness)
+    # Likeness value of current candidate is n, where n > 0. Only candidates
+    # that have an equal likeness value with this choice are correct.
+    @candidates.each do |i|
+      i.eligible = false if i.compare(candidate) != likeness
+    end
+  end
+
+  def eliminate_options(candidate, likeness)
+    # Set the likeness of the current choice. This also disables it by default.
+    likeness(candidate, likeness)
+
+    @candidates.each do |i|
+      next unless i.eligible
+      eliminate_based_on_likeness(candidate, likeness)
+      eliminate_historically_invalid_candidates(i)
+    end
+  end
+
+  def eligible_candidates
     eligible_candidates = []
 
     @candidates.each do |i|
       eligible_candidates.push(i) if i.eligible
     end
 
-    return eligible_candidates
+    eligible_candidates
   end
 
-  def get_eligible_count()
-    calculate_eligible_count()
-
-    return @eligible_count
-  end
-
-  def get_index_by_text(text)
+  def index_by_text(text)
     # Returns the index of the element with @text == text
+    @candidates.index { |candidate| candidate.text == text }
+  end
 
-    c = 0
-    index = nil
+  def likeness(text, likeness)
+    @candidates[index_by_text(text)].likeness = likeness
+  end
+
+  def show_all_candidates
+    return false if @candidates.length > 0
+    puts 'Candidates:'
     @candidates.each do |i|
-      if text == i.text
-        index = c
-      end
-      c = c + 1
-    end
-
-    return index
-  end
-
-  def list()
-    return @candidates
-  end
-end
-
-def eliminate_others(current_choice, choice_likeness, candidate_list)
-  # Set the likeness of the current choice. This also disables it by default.
-  candidate_list.set_likeness(current_choice, choice_likeness)
-
-  candidate_list.list.each do |i|
-    if i.eligible
-      if choice_likeness == 0
-        # Any other candidates that share any likeness with
-        # this candidate are incorrect.
-        i.disable if i.compare(current_choice) >= 1
-      else
-        # Likeness value of current candidate is n, where n > 0
-        # Only candidates that have an equal likeness value
-        # with this choice are correct.
-        i.disable if i.compare(current_choice) != choice_likeness
-      end
-
-      # Check each remaining candidate against all previously
-      # attempted candidates. Only candidates that have matching
-      # likeness to EACH of the previously tried candidates
-      # are valid.
-      candidate_list.get_attempted_candidates.each do |j|
-        if !( i.compare(j.text) == j.likeness )
-          i.disable
-        end
-      end
+      puts "#{i.text}"
     end
   end
 
-  return candidate_list
-end
-
-def get_starting_candidates_from_user()
-  flag = "0"
-  count = 0
-  candidate_list = CandidateList.new()
-
-  puts "Enter a starting candidate and press ENTER. Enter 0 when done."
-
-  loop do
-    current_input = gets.chomp
-    if current_input != flag
-      count = count + 1
-      candidate_list.add_candidate( current_input )
+  def show_eligible_candidates
+    puts 'Possible candidates:'
+    eligible_candidates.each do |i|
+      puts i.text
     end
-    puts "You entered \"#{current_input}\". Total candidates entered: #{count}."
-    break if current_input == flag
   end
 
-  if count > 0
-    candidate_list.show_all_candidates
-  end
+  def starting_candidates_from_user
+    current_input = nil
 
-  return candidate_list
-end
-
-def try_candidates(candidate_list)
-  flag = "0"
-  space = " - - - - - - - - - - - - - - - - - - - - - - - - - - - - - -"
-  remaining_candidates = candidate_list.get_eligible_count()
-
-  puts space
-  puts "You may now start attempting passwords."
-  puts "One at a time, enter a possible password from the list of remaining "
-  puts "password candidates. Then, enter the Likeness value returned by the "
-  puts "terminal. This program will narrow down the remaining options after "
-  puts "each input."
-
-  loop do
-    puts "Enter a possible password:"
-    current_input_candidate = gets.chomp
-
-    if current_input_candidate != flag
-      puts "Likeness value for \"#{current_input_candidate}\":"
-      current_input_likeness = (gets.chomp).to_i
-
-      # Eliminate current candidate and all impossible candidates
-      candidate_list = eliminate_others(current_input_candidate, current_input_likeness, candidate_list)
-
-      puts space
-      candidate_list.show_eligible_candidates
+    puts '', 'Enter a starting candidate and press ENTER. Enter 0 when done.'
+    while current_input != '0'
+      current_input = gets.chomp
+      add_candidate(current_input, '0')
+      output = "You entered \"#{current_input}\". Candidates entered: "\
+               "#{@candidates.length}. Next candidate:"
+      puts output
     end
+  end
 
-    break if current_input_candidate == flag || candidate_list.get_eligible_count() <= 1
+  def try_candidates
+    current_input = nil
+    while eligible_candidates.length > 1 && current_input != '0'
+      puts 'Enter a possible password:'
+      current_input = gets.chomp
+      puts "Likeness value for \"#{current_input}\":"
+      likeness = (gets.chomp).to_i
+      eliminate_options(current_input, likeness)
+      puts
+      show_eligible_candidates
+    end
   end
 end
 
-candidate_list = get_starting_candidates_from_user()
-try_candidates(candidate_list)
+candidate_list = CandidateList.new
+candidate_list.starting_candidates_from_user
+candidate_list.show_all_candidates
+candidate_list.try_candidates
